@@ -1,87 +1,171 @@
-# 🔐 daaju-secure
+# 🔐 SecurePass
 
-daaju-secure is a lightweight Java library for secure password handling — hashing, verification, and validation — built using modern cryptographic best practices. It provides a simple and safe starting point for storing passwords correctly without reinventing crypto.
+> A professional-grade Java library for secure password hashing, built from the ground up with security-first principles.
+
+SecurePass implements **PBKDF2-HMAC-SHA256** with a clean, fluent API — making it trivial to hash and verify passwords correctly, without needing to understand the underlying cryptographic machinery.
+
+---
 
 ## ✨ Features
-- PBKDF2-based password hashing
-- Secure salt generation using SecureRandom
-- Constant-time password verification
-- Builder-style configuration API
-- Password and input validation helpers
-- Minimal, dependency-free Java code
+
+- **PBKDF2-HMAC-SHA256** — OWASP-recommended algorithm with 120,000 iterations by default
+- **Cryptographically secure salts** — generated via `java.security.SecureRandom`
+- **Constant-time comparison** — prevents timing attacks during verification
+- **Fluent Builder API** — fully configurable iterations, salt length, and hash length
+- **Modular hash format** — serializable/parse-able `$pbkdf2-sha256$i=...` format
+- **Strict input validation** — rejects null, empty, or out-of-range parameters with clear error messages
+- **Zero dependencies** — uses only the Java standard library (`javax.crypto`, `java.security`)
+
+---
+
+## � Quick Start
+
+### Hash a password
+```java
+PasswordHashResult result = SecurePass.hash("myPassword123");
+String stored = result.toString();
+// → $pbkdf2-sha256$i=120000$<base64-salt>$<base64-hash>
+```
+
+### Verify a password
+```java
+boolean isValid = SecurePass.verify("myPassword123", result);  // true
+boolean isWrong = SecurePass.verify("wrongPassword", result);  // false
+```
+
+### Custom configuration (Builder API)
+```java
+PasswordHashResult result = SecurePass.with()
+        .iterations(200_000)   // higher = slower = more secure
+        .saltLength(32)        // bytes (default: 16)
+        .hashLength(64)        // bytes (default: 32)
+        .hash("myPassword123");
+```
+
+### Serialize & deserialize
+```java
+// Serialize to string (for storing in DB)
+String stored = result.toString();
+
+// Reconstruct from stored string
+PasswordHashResult restored = PasswordHashResult.fromString(stored);
+boolean valid = SecurePass.verify("myPassword123", restored);  // true
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+SecurePass              ← Public entry point (Simple API + Builder factory)
+SecurePassBuilder       ← Fluent builder for custom configuration
+PBKDF2Hasher            ← Core hashing & verification logic
+PasswordHashResult      ← Immutable result object with serialization
+ValidationUtils         ← Input validation with descriptive error messages
+CryptoBasics            ← Utility helpers (SecureRandom, SHA-256, Base64)
+```
+
+### Hash Format
+```
+$pbkdf2-sha256$i=120000$<Base64-salt>$<Base64-hash>
+```
+
+This format is inspired by the **Modular Crypt Format (MCF)**, making stored hashes self-describing and forward-compatible.
+
+---
+
+## 🔒 Security Design Decisions
+
+| Concern | Solution |
+|---|---|
+| Brute-force / dictionary attacks | PBKDF2 with 120,000 iterations (OWASP 2023 minimum) |
+| Rainbow table attacks | Unique random salt per password via `SecureRandom` |
+| Timing attacks | XOR-based constant-time byte comparison |
+| Hash leakage | Defensive copies of byte arrays in `PasswordHashResult` |
+| Password in memory | `char[]` cleared with `spec.clearPassword()` after use |
+
+---
+
+## ⚙️ Configuration Defaults & Limits
+
+| Parameter | Default | Min | Max |
+|---|---|---|---|
+| Iterations | 120,000 | 1,000 | 10,000,000 |
+| Salt length | 16 bytes | 8 bytes | 128 bytes |
+| Hash length | 32 bytes | 16 bytes | 512 bytes |
+| Password length | — | 1 char | 1,000 chars |
+
+---
 
 ## 📦 Project Structure
-daaju-secure/
-- PBKDF2Hasher.java
-- SecurePass.java
-- SecurePassBuilder.java
-- CryptoBasics.java
-- ValidationUtils.java
-- PasswordHashResult.java
 
-## 🚧 Status
-- Early-stage / prototype
-- No tests or CI yet
-- No license file (recommended before public use)
+```
+Daaju-secure/
+├── SecurePass.java          # Main public API
+├── SecurePassBuilder.java   # Fluent builder
+├── PBKDF2Hasher.java        # Core PBKDF2 implementation
+├── PasswordHashResult.java  # Immutable result + serialization
+├── ValidationUtils.java     # Input validation
+└── CryptoBasics.java        # Crypto utility helpers
+```
 
-## 🚀 Getting Started
-Prerequisites:
-- Java 8+ (Java 11+ recommended)
+---
 
-Compile (no build tool):
-git clone https://github.com/i-rajatkandpal/daaju-secure.git
-cd daaju-secure
-javac -d out src/*.java
+## 🧪 Running Tests
 
-Adding Maven or Gradle is recommended for testing and dependency management.
+The `SecurePass.main()` method includes a built-in test suite demonstrating:
 
-## 🧠 Usage Examples (Conceptual)
+1. **Simple hash & verify** — correct and incorrect password
+2. **Custom config hash** — builder API with 150K iterations
+3. **Salt uniqueness** — same password produces different hashes
+4. **Performance benchmark** — default vs. custom iteration counts
 
-PBKDF2 Hasher:
-String password = "S3cur3P@ssw0rd!";
+Run it directly with:
+```bash
+javac *.java && java SecurePass
+```
 
-PBKDF2Hasher hasher = new PBKDF2Hasher();
+Expected output:
+```
+=== SecurePass Test ===
 
-PasswordHashResult result = hasher.hashPassword(password);
+Test 1: Simple hash
+Hash: $pbkdf2-sha256$i=120000$...
+Verify 'Rajat': true
+Verify 'rajat': false
 
-String stored = result.toEncodedString();
+Test 2: Custom config
+...
 
-boolean verified = hasher.verifyPassword(password, stored);
+Test 3: Different salts
+Are different: true
 
-SecurePass Builder:
-SecurePass securePass = new SecurePassBuilder()
-    .withIterations(150_000)
-    .withSaltLength(16)
-    .withAlgorithm("PBKDF2WithHmacSHA256")
-    .build();
+Test 4: Performance
+Default (120K): ~800ms
+Custom (200K): ~1300ms
+```
 
-    
-String hash = securePass.hash("password123");
+---
 
+## 🛣️ Roadmap
 
-boolean matches = securePass.verify("password123", hash);
+- [ ] BCrypt algorithm support (`BCryptHasher implements Hasher`)
+- [ ] Algorithm factory & migration utilities
+- [ ] Password strength validator (entropy, common password detection)
+- [ ] Secure token generator (hex/Base64 random tokens)
+- [ ] Maven packaging for library distribution
+- [ ] GitHub Actions CI with 85%+ test coverage
 
-## 🔐 Security Notes
-- Uses Java SecretKeyFactory with PBKDF2
-- Salt length ≥ 16 bytes
-- High, configurable iteration count (100k+ recommended)
-- Constant-time comparison to prevent timing attacks
-- Avoid logging passwords, salts, or hashes
-- Follow OWASP and NIST guidance for parameter updates
+---
 
-## 🛠️ Recommended Next Steps
-- Add a LICENSE file (MIT / Apache-2.0)
-- Add unit tests (PBKDF2 test vectors)
-- Add Maven or Gradle build
-- Configure GitHub Actions CI
-- Run static analysis (SpotBugs / FindSecBugs)
+## 📚 References
 
-## 🤝 Contributing
-Fork the repository, make your changes, add tests where applicable, and open a pull request. Security-related changes should be well-documented.
+- [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- [RFC 2898 — PBKDF2 Specification](https://www.rfc-editor.org/rfc/rfc2898)
+- [Java Cryptography Architecture (JCA)](https://docs.oracle.com/en/java/docs/books/security/SecureCodeGuidelines.pdf)
+
+---
 
 ## 👤 Author
-Rajat Kandpal  
-GitHub: https://github.com/i-rajatkandpal
 
-## 📜 License
-No license included yet. Add one before using this project in production.
+**Rajat Kandpal** — built as a deep-dive into Java cryptography and security engineering.
